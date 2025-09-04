@@ -1,0 +1,18 @@
+New_Quality_Framework_for_Ads_Selling:
+  Zero_Tolerance_Policy:
+    - Rude_or_abusive_behaviour
+    - Wrong_Information:
+        - DIY_ads_is_inferior_to_agent_ads
+        - Lying_to_restaurant_on_agreed_vs_actual_contract
+  Red_Flags:
+    - Not_confirming_restaurant_data:
+        - Restaurant_name
+        - Owner_name
+    - Exaggerated_return_on_investment: "Anything_above_5x"
+  Quality_Feedback:
+    Description: "Improvement feedback for agents"
+    Parameters:
+      - Active_Listening
+      - Courteous
+      - Script_Adherence
+      - Empathic
