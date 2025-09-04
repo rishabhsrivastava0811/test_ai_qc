@@ -1,0 +1,113 @@
+# Example QC rubric (customize freely)
+# Scoring: 0-100 per metric. Overall = weighted average. Verdict via thresholds.
+name: "Zomato AI-KAM Call QC v1"
+version: "2025-08-27"
+global_rules:
+  - "Be strict: default to lower scores when evidence is weak."
+  - "Quote exact lines with timestamps if the transcript contains timestamps."
+  - "Penalize hallucinations or invented facts."
+  - "Flag any sign of mis-selling or lack of consent."
+verdict_thresholds:
+  pass: 80
+  needs_review: 60
+
+metrics:
+  - id: "script_adherence"
+    name: "Script Adherence"
+    weight: 0.15
+    description: "Did the agent cover required checkpoints (greeting, consent, purpose, closure)?"
+    rubric:
+      excellent: "All checkpoints covered clearly and in the right order."
+      good: "Missed at most one minor checkpoint."
+      poor: "Missed multiple required checkpoints or wrong order."
+    min_quotes: 2
+
+  - id: "consent_ethics"
+    name: "Consent & Ethics"
+    weight: 0.15
+    description: "Explicit consent, transparency, no coercion, accurate claims."
+    rubric:
+      excellent: "Explicit consent & transparent disclosures; no pressure tactics."
+      poor: "No consent or signs of coercion or mis-selling."
+    must_flag:
+      - "Any mis-selling, false claim, or fabricated numbers."
+      - "No consent taken before proceeding."
+    min_quotes: 1
+
+  - id: "personalization_context"
+    name: "Personalization"
+    weight: 0.10
+    description: "Tailors conversation to restaurant context (menu, cuisine, prior issues)."
+    rubric:
+      excellent: "Specific references that clearly match this restaurant; relevant suggestions."
+      poor: "Generic pitch with no restaurant-specific details."
+    min_quotes: 2
+
+  - id: "problem_solving"
+    name: "Problem Solving"
+    weight: 0.15
+    description: "Understands issues and proposes workable next steps; sets expectations."
+    rubric:
+      excellent: "Identifies root cause and proposes concrete steps with clear ownership."
+      good: "Some steps proposed but incomplete."
+      poor: "Vague or deflective; no clear resolution."
+    min_quotes: 2
+
+  - id: "objection_handling"
+    name: "Objection Handling"
+    weight: 0.10
+    description: "Listens and addresses objections accurately (price, ROI, competitor)."
+    rubric:
+      excellent: "Accurate, respectful, evidence-backed responses; no overpromises."
+      poor: "Dismissive or incorrect information."
+    min_quotes: 2
+
+  - id: "communication_tone"
+    name: "Communication & Tone"
+    weight: 0.10
+    description: "Clarity, pace, politeness; appropriate Hinglish/Devanagari usage if applicable."
+    rubric:
+      excellent: "Clear, polite, and paced well; correct register and language."
+      poor: "Rushed/unclear; rude or robotic."
+    min_quotes: 1
+
+  - id: "growth_pitch_quality"
+    name: "Growth Pitch Quality"
+    weight: 0.10
+    description: "Explains benefits (ads, ROI pack, ZVD) with realistic expectations and steps."
+    rubric:
+      excellent: "Concrete benefits tied to context; realistic ROI; next steps agreed."
+      poor: "Vague claims or unrealistic promises."
+    min_quotes: 2
+
+  - id: "accuracy_claims"
+    name: "Accuracy of Claims"
+    weight: 0.10
+    description: "Facts/numbers correct; avoids fabricated data."
+    rubric:
+      excellent: "All claims plausible and consistent; cites app data or prior records."
+      poor: "Inflated or false metrics."
+    must_flag:
+      - "Any fabricated or unverifiable numbers presented as facts."
+    min_quotes: 1
+
+  - id: "closure_next_steps"
+    name: "Closure & Next Steps"
+    weight: 0.05
+    description: "Summarizes decisions; sets follow-up with owner and AI-KAM; confirms consent."
+    rubric:
+      excellent: "Clear summary and agreed follow-up timeline; contact modes confirmed."
+      poor: "No summary or next steps."
+    min_quotes: 1
+
+  - id: "compliance_special"
+    name: "Compliance (Special)"
+    weight: 0.10
+    description: "Any policy red flags (FSSAI expiry, prohibited claims, data privacy)."
+    rubric:
+      excellent: "No violations."
+      poor: "Any breach detected."
+    must_flag:
+      - "FSSAI expiry admitted without corrective plan."
+      - "Sharing sensitive customer data."
+    min_quotes: 1
