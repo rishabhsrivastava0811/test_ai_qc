@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import json, io, os, yaml
+import json, os
 from qc_evaluator import evaluate_with_openai, load_rubric
 from openai import OpenAI
 
@@ -15,8 +15,10 @@ st.title("📞 GPT-based Call QC (Configurable Rubrics)")
 # ---------------------------
 with st.sidebar:
     st.header("🔐 OpenAI Settings")
-    api_key = st.text_input("OpenAI API Key", type="password", help="Your key is kept in memory for this session only.")
-    model = st.text_input("Model", value="gpt-4o-mini", help="Use any chat-capable model available to your account.")
+    api_key = st.text_input("OpenAI API Key", type="password",
+                            help="Your key is kept in memory for this session only.")
+    model = st.text_input("Model", value="gpt-4o-mini",
+                          help="Use any chat-capable model available to your account.")
     temperature = st.slider("Temperature", 0.0, 1.0, 0.0, 0.1)
     use_responses = st.toggle("Use Responses API (json_schema)", value=True)
     st.markdown("---")
@@ -34,6 +36,36 @@ if not yaml_files:
 # Tabs
 # ---------------------------
 tab1, tab2, tab3 = st.tabs(["Single Call", "Batch", "Settings"])
+
+
+# ---------------------------
+# Helper: Transcribe audio
+# ---------------------------
+def transcribe_audio(client, audio_file):
+    try:
+        audio_bytes = audio_file.read()
+        tmp_path = f"/tmp/{audio_file.name}"
+        with open(tmp_path, "wb") as f:
+            f.write(audio_bytes)
+
+        try:
+            # Try GPT-4o transcription
+            tr = client.audio.transcriptions.create(
+                model="gpt-4o-transcribe",
+                file=open(tmp_path, "rb")
+            )
+        except Exception:
+            # Fallback to whisper-1
+            tr = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=open(tmp_path, "rb")
+            )
+
+        return tr.text
+    except Exception as e:
+        st.error(f"Transcription failed: {e}")
+        return ""
+
 
 # ---------------------------
 # Tab 1 - Single Call
@@ -156,46 +188,103 @@ with tab1:
 
             except Exception as e:
                 st.error(f"QC failed: {e}")
+
+
 # ---------------------------
 # Tab 2 - Batch
 # ---------------------------
 with tab2:
     st.subheader("Batch Evaluation")
 
+    # --- Pick YAML Rubric ---
     selected_batch_yaml = st.selectbox("Choose QC Rubric (Batch)", options=yaml_files, index=0, key="batch_yaml")
     yaml_path = os.path.join(config_dir, selected_batch_yaml)
     with open(yaml_path, "r", encoding="utf-8") as f:
         batch_yaml = f.read()
 
-    uploaded_csv = st.file_uploader("Upload CSV with columns: call_id, transcript", type=["csv"])
+    # --- Upload CSV ---
+    uploaded_csv = st.file_uploader("Upload CSV with one column: 'link'", type=["csv"])
 
     if st.button("Run Batch", disabled=not(api_key and uploaded_csv)):
         try:
+            import requests, tempfile
+
             client = OpenAI(api_key=api_key)
             df = pd.read_csv(uploaded_csv)
-            out_rows = []
-            progress = st.progress(0)
-            for i, row in df.iterrows():
-                call_id = row.get("call_id", f"row_{i}")
-                tx = str(row.get("transcript", ""))
-                res = evaluate_with_openai(
-                    client, model, tx, batch_yaml, 0.0, use_responses_api=use_responses
-                )
-                out_rows.append({
-                    "call_id": call_id,
-                    "overall_score": res.get("overall_score"),
-                    "verdict": res.get("verdict"),
-                    "summary": res.get("summary", ""),
-                    "per_metric_json": json.dumps(res.get("per_metric", []), ensure_ascii=False)
-                })
-                progress.progress((i + 1) / len(df))
 
-            out_df = pd.DataFrame(out_rows)
-            st.success("Batch complete")
-            st.dataframe(out_df, use_container_width=True)
-            st.download_button("⬇️ Download Batch CSV", data=out_df.to_csv(index=False), file_name="qc_batch_results.csv", mime="text/csv")
+            # Validate CSV
+            if df.shape[1] != 1:
+                st.error("CSV must have exactly one column with header 'link'")
+            elif "link" not in df.columns:
+                st.error("First column header must be 'link'")
+            else:
+                out_rows = []
+                progress = st.progress(0)
+
+                for i, row in df.iterrows():
+                    link = str(row["link"]).strip()
+                    if not link:
+                        continue
+
+                    try:
+                        # --- Step 1: Download audio file ---
+                        response = requests.get(link)
+                        response.raise_for_status()
+
+                        tmp_path = tempfile.mktemp(suffix=".mp3")
+                        with open(tmp_path, "wb") as f:
+                            f.write(response.content)
+
+                        # --- Step 2: Transcribe ---
+                        try:
+                            tr = client.audio.transcriptions.create(
+                                model="gpt-4o-transcribe",
+                                file=open(tmp_path, "rb")
+                            )
+                        except Exception:
+                            tr = client.audio.transcriptions.create(
+                                model="whisper-1",
+                                file=open(tmp_path, "rb")
+                            )
+                        transcript = tr.text
+
+                        # --- Step 3: QC Analysis using YAML rubric ---
+                        res = evaluate_with_openai(
+                            client, model, transcript, batch_yaml,
+                            0.0, use_responses_api=use_responses
+                        )
+                        analysis_text = json.dumps(res, ensure_ascii=False, indent=2)
+
+                        out_rows.append({
+                            "link": link,
+                            "transcript": transcript,
+                            "analysis": analysis_text
+                        })
+
+                    except Exception as e:
+                        out_rows.append({
+                            "link": link,
+                            "transcript": "",
+                            "analysis": f"Error: {e}"
+                        })
+
+                    progress.progress((i + 1) / len(df))
+
+                # --- Step 4: Show + Export Results ---
+                out_df = pd.DataFrame(out_rows)
+                st.success("Batch complete 🎉")
+                st.dataframe(out_df, use_container_width=True)
+
+                st.download_button(
+                    "⬇️ Download Results CSV",
+                    data=out_df.to_csv(index=False),
+                    file_name="qc_batch_results.csv",
+                    mime="text/csv"
+                )
+
         except Exception as e:
             st.error(f"Batch failed: {e}")
+
 
 # ---------------------------
 # Tab 3 - Settings & Notes
