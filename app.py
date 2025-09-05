@@ -7,8 +7,8 @@ from openai import OpenAI
 # ---------------------------
 # Page setup
 # ---------------------------
-st.set_page_config(page_title="GPT Call QC", layout="wide")
-st.title("📞 GPT-based Call QC (Configurable Rubrics)")
+st.set_page_config(page_title="AI Moderated QC", layout="wide")
+st.title("AI QC")
 
 # ---------------------------
 # Sidebar settings
